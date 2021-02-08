@@ -73,6 +73,7 @@ func (t *Tunnel) transport(conn net.Conn) {
 	}
 	go t.pipe(bconn, fconn, writeChan)
 	go t.pipe(fconn, bconn, readChan)
+
 	readBytes = <-readChan
 	writeBytes = <-writeChan
 	transferTime := time.Now().Sub(start)

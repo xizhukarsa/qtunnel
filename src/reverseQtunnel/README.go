@@ -13,7 +13,7 @@ use to replace simple jump server
 ## how to used
 * public host with ip1;
 * local service with port1;
-* run server like `rqtunnel -listen=:1234 -webServicePort=:1111 -crypto=	rc4 -secret=1234`;
-* run client like `rqtunnel -clientmode=true -remoteAddr=ip1:1234 -localAddr=:port1 -name=localservice1 -crypto=	rc4 -secret=1234`
+* run server like `rqtunnel -listen=:1234 -webServicePort=:1111 -crypto=rc4 -secret=1234`;
+* run client like `rqtunnel -clientmode=true -remoteAddr=ip1:1234 -localAddr=:port1 -name=localservice1 -crypto=rc4 -secret=1234`
 * list tunnel with `ip1:1111/listItem`, return `{"list":[{"name":"localservice1", "port":port2}]}`;
 * connect local service with `ip1:port2`

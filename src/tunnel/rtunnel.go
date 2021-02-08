@@ -9,26 +9,31 @@ import (
 )
 
 type ReverseTunnel struct {
-	faddr, baddr  *net.TCPAddr
-	clientMode    bool
-	cryptoMethod  string
-	secret        []byte
-	sessionsCount int32
-	pool          *recycler
+	faddr, baddr, local *net.TCPAddr
+	clientMode          bool
+	cryptoMethod        string
+	secret              []byte
+	sessionsCount       int32
+	pool                *recycler
 }
 
-func NewReverseTunnel(faddr, baddr string, clientMode bool, cryptoMethod, secret string, size uint32) *ReverseTunnel {
+func NewReverseTunnel(faddr, baddr, local string, clientMode bool, cryptoMethod, secret string, size uint32) *ReverseTunnel {
 	a1, err := net.ResolveTCPAddr("tcp", faddr)
 	if err != nil {
 		log.Fatalln("resolve frontend error:", err)
 	}
 	a2, err := net.ResolveTCPAddr("tcp", baddr)
-	if err != nil {
+	if err != nil && clientMode {
+		log.Fatalln("resolve backend error:", err)
+	}
+	a3, err := net.ResolveTCPAddr("tcp", local)
+	if err != nil && clientMode {
 		log.Fatalln("resolve backend error:", err)
 	}
 	return &ReverseTunnel{
 		faddr:         a1,
 		baddr:         a2,
+		local:         a3,
 		clientMode:    clientMode,
 		cryptoMethod:  cryptoMethod,
 		secret:        []byte(secret),

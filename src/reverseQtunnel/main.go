@@ -24,11 +24,12 @@ func waitSignal() {
 }
 
 func main() {
-	var faddr, baddr, cryptoMethod, secret, logTo string
+	var faddr, baddr, local, cryptoMethod, secret, logTo string
 	var clientMode bool
 	flag.StringVar(&logTo, "logto", "stdout", "stdout or syslog")
 	flag.StringVar(&faddr, "listen", ":9001", "host:port qtunnel listen on")
 	flag.StringVar(&baddr, "backend", "127.0.0.1:6400", "host:port of the backend")
+	flag.StringVar(&local, "local", ":9001", "host:port qtunnel listen on")
 	flag.StringVar(&cryptoMethod, "crypto", "rc4", "encryption method")
 	flag.StringVar(&secret, "secret", "secret", "password used to encrypt the data")
 	flag.BoolVar(&clientMode, "clientmode", false, "if running at client mode")
@@ -43,7 +44,7 @@ func main() {
 		log.SetOutput(w)
 	}
 
-	t := tunnel.NewReverseTunnel(faddr, baddr, clientMode, cryptoMethod, secret, 4096)
+	t := tunnel.NewReverseTunnel(faddr, baddr, local, clientMode, cryptoMethod, secret, 4096)
 	log.Println("qtunnel started.")
 	go t.Start()
 	waitSignal()

@@ -27,11 +27,11 @@ func main() {
 	var faddr, baddr, local, cryptoMethod, secret, logTo string
 	var clientMode bool
 	flag.StringVar(&logTo, "logto", "stdout", "stdout or syslog")
-	flag.StringVar(&faddr, "listen", ":9001", "host:port qtunnel listen on")
-	flag.StringVar(&baddr, "backend", "127.0.0.1:6400", "host:port of the backend")
+	flag.StringVar(&faddr, "listen", ":8080", "host:port qtunnel listen on")
+	flag.StringVar(&baddr, "backend", ":1111", "host:port of the backend")
 	flag.StringVar(&cryptoMethod, "crypto", "rc4", "encryption method")
 	flag.StringVar(&secret, "secret", "secret", "password used to encrypt the data")
-	flag.BoolVar(&clientMode, "clientmode", false, "if running at client mode")
+	flag.BoolVar(&clientMode, "clientmode", true, "if running at client mode")
 	flag.Parse()
 
 	log.SetOutput(os.Stdout)

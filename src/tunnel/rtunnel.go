@@ -119,4 +119,9 @@ func (t *ReverseTunnel) StartClient() {
 	fconn = NewConn(conn2, nil, t.pool)
 	go t.pipe(bconn, fconn, writeChan)
 	go t.pipe(fconn, bconn, readChan)
+
+	var readBytes, writeBytes int64
+	readBytes = <-readChan
+	writeBytes = <-writeChan
+	log.Printf("r:%d w:%d", readBytes, writeBytes)
 }

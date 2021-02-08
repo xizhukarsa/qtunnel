@@ -53,9 +53,6 @@ func (t *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
 }
 
 func (t *ReverseTunnel) StartServer() {
-	ch1 := make(chan *net.TCPConn, 1)
-	ch2 := make(chan *net.TCPConn, 1)
-
 	cnf := func(addr *net.TCPAddr, ch chan *net.TCPConn) {
 		ln1, err := net.ListenTCP("tcp", t.faddr)
 		if err != nil {
@@ -70,25 +67,37 @@ func (t *ReverseTunnel) StartServer() {
 		ch <- conn
 	}
 
+	// 获取客户端的链接
+	ch1 := make(chan *net.TCPConn, 1)
 	go cnf(t.baddr, ch1)
-	go cnf(t.faddr, ch2)
-
 	cn1 := <-ch1
-	cn2 := <-ch2
 
-	cipher := NewCipher(t.cryptoMethod, t.secret)
-	fconn := NewConn(cn1, nil, t.pool)
-	bconn := NewConn(cn2, cipher, t.pool)
+	log.Println("client connected")
 
-	readChan := make(chan int64)
-	writeChan := make(chan int64)
-	go t.pipe(bconn, fconn, writeChan)
-	go t.pipe(fconn, bconn, readChan)
+	for {
+		// 获取用户的链接
+		ch2 := make(chan *net.TCPConn, 1)
+		go cnf(t.faddr, ch2)
+		cn2 := <-ch2
+		log.Println("user connected")
 
-	var readBytes, writeBytes int64
-	readBytes = <-readChan
-	writeBytes = <-writeChan
-	log.Printf("r:%d w:%d", readBytes, writeBytes)
+		go func() {
+			cipher := NewCipher(t.cryptoMethod, t.secret)
+			fconn := NewConn(cn1, nil, t.pool)
+			bconn := NewConn(cn2, cipher, t.pool)
+
+			readChan := make(chan int64)
+			writeChan := make(chan int64)
+			go t.pipe(bconn, fconn, writeChan)
+			go t.pipe(fconn, bconn, readChan)
+
+			var readBytes, writeBytes int64
+			readBytes = <-readChan
+			writeBytes = <-writeChan
+			log.Printf("r:%d w:%d", readBytes, writeBytes)
+		}()
+	}
+
 }
 
 func (t *ReverseTunnel) StartClient() {

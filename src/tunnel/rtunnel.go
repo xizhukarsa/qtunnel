@@ -104,18 +104,27 @@ func (t *ReverseTunnel) StartServer() {
 }
 
 func (t *ReverseTunnel) StartClient() {
-	ln, err := net.ListenTCP("tcp", t.faddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer ln.Close()
+	log.Println("start client ")
+	defer log.Println("client end")
 
-	for {
-		conn, err := ln.AcceptTCP()
-		if err != nil {
-			log.Println("accept:", err)
-			continue
-		}
-		go t.transport(conn)
+	conn1, err := net.DialTCP("tcp", nil, t.baddr)
+	if err != nil {
+		log.Print(err)
+		return
 	}
+
+	conn2, err := net.DialTCP("tcp", nil, t.local)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	cipher := NewCipher(t.cryptoMethod, t.secret)
+	readChan := make(chan int64)
+	writeChan := make(chan int64)
+	var bconn, fconn *Conn
+	fconn = NewConn(conn2, nil, t.pool)
+	bconn = NewConn(conn1, cipher, t.pool)
+	go t.pipe(bconn, fconn, writeChan)
+	go t.pipe(fconn, bconn, readChan)
 }

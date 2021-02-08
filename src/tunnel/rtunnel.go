@@ -4,8 +4,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"sync/atomic"
-	"time"
 )
 
 type ReverseTunnel struct {
@@ -23,7 +21,7 @@ func NewReverseTunnel(faddr, baddr, local string, clientMode bool, cryptoMethod,
 		log.Fatalln("resolve frontend error:", err)
 	}
 	a2, err := net.ResolveTCPAddr("tcp", baddr)
-	if err != nil && clientMode {
+	if err != nil {
 		log.Fatalln("resolve backend error:", err)
 	}
 	a3, err := net.ResolveTCPAddr("tcp", local)
@@ -54,53 +52,43 @@ func (t *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
 	c <- n
 }
 
-func (t *ReverseTunnel) transport(conn net.Conn) {
-	start := time.Now()
-	conn2, err := net.DialTCP("tcp", nil, t.baddr)
-	if err != nil {
-		log.Print(err)
-		return
+func (t *ReverseTunnel) StartServer() {
+	ch1 := make(chan *net.TCPConn, 1)
+	ch2 := make(chan *net.TCPConn, 1)
+
+	cnf := func(addr *net.TCPAddr, ch chan *net.TCPConn) {
+		ln1, err := net.ListenTCP("tcp", t.faddr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer ln1.Close()
+
+		conn, err := ln1.AcceptTCP()
+		if err != nil {
+			log.Fatal("accept:", err)
+		}
+		ch <- conn
 	}
-	connectTime := time.Now().Sub(start)
-	start = time.Now()
+
+	go cnf(t.baddr, ch1)
+	go cnf(t.faddr, ch2)
+
+	cn1 := <-ch1
+	cn2 := <-ch2
+
 	cipher := NewCipher(t.cryptoMethod, t.secret)
+	fconn := NewConn(cn1, nil, t.pool)
+	bconn := NewConn(cn2, cipher, t.pool)
+
 	readChan := make(chan int64)
 	writeChan := make(chan int64)
-	var readBytes, writeBytes int64
-	atomic.AddInt32(&t.sessionsCount, 1)
-	var bconn, fconn *Conn
-	if t.clientMode {
-		fconn = NewConn(conn, nil, t.pool)
-		bconn = NewConn(conn2, cipher, t.pool)
-	} else {
-		fconn = NewConn(conn, cipher, t.pool)
-		bconn = NewConn(conn2, nil, t.pool)
-	}
 	go t.pipe(bconn, fconn, writeChan)
 	go t.pipe(fconn, bconn, readChan)
+
+	var readBytes, writeBytes int64
 	readBytes = <-readChan
 	writeBytes = <-writeChan
-	transferTime := time.Now().Sub(start)
-	log.Printf("r:%d w:%d ct:%.3f t:%.3f [#%d]", readBytes, writeBytes,
-		connectTime.Seconds(), transferTime.Seconds(), t.sessionsCount)
-	atomic.AddInt32(&t.sessionsCount, -1)
-}
-
-func (t *ReverseTunnel) StartServer() {
-	ln, err := net.ListenTCP("tcp", t.faddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer ln.Close()
-
-	for {
-		conn, err := ln.AcceptTCP()
-		if err != nil {
-			log.Println("accept:", err)
-			continue
-		}
-		go t.transport(conn)
-	}
+	log.Printf("r:%d w:%d", readBytes, writeBytes)
 }
 
 func (t *ReverseTunnel) StartClient() {

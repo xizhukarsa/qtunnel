@@ -46,6 +46,10 @@ func main() {
 
 	t := tunnel.NewReverseTunnel(faddr, baddr, local, clientMode, cryptoMethod, secret, 4096)
 	log.Println("qtunnel started.")
-	go t.Start()
+	if clientMode {
+		go t.StartClient()
+	} else {
+		go t.StartServer()
+	}
 	waitSignal()
 }

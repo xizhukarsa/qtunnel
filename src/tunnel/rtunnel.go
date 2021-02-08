@@ -86,7 +86,24 @@ func (t *ReverseTunnel) transport(conn net.Conn) {
 	atomic.AddInt32(&t.sessionsCount, -1)
 }
 
-func (t *ReverseTunnel) Start() {
+func (t *ReverseTunnel) StartServer() {
+	ln, err := net.ListenTCP("tcp", t.faddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer ln.Close()
+
+	for {
+		conn, err := ln.AcceptTCP()
+		if err != nil {
+			log.Println("accept:", err)
+			continue
+		}
+		go t.transport(conn)
+	}
+}
+
+func (t *ReverseTunnel) StartClient() {
 	ln, err := net.ListenTCP("tcp", t.faddr)
 	if err != nil {
 		log.Fatal(err)

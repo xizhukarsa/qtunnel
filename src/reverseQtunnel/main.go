@@ -1,13 +1,12 @@
 package main
 
 import (
-	"flag"
 	"log"
-	"log/syslog"
 	"os"
 	"os/signal"
 	"qtunnel/src/tunnel"
 	"syscall"
+	"time"
 )
 
 func waitSignal() {
@@ -24,31 +23,8 @@ func waitSignal() {
 }
 
 func main() {
-	var faddr, baddr, local, cryptoMethod, secret, logTo string
-	var clientMode bool
-	flag.StringVar(&logTo, "logto", "stdout", "stdout or syslog")
-	flag.StringVar(&faddr, "listen", ":8080", "host:port qtunnel listen on")
-	flag.StringVar(&baddr, "backend", ":1111", "host:port of the backend")
-	flag.StringVar(&cryptoMethod, "crypto", "rc4", "encryption method")
-	flag.StringVar(&secret, "secret", "secret", "password used to encrypt the data")
-	flag.BoolVar(&clientMode, "clientmode", true, "if running at client mode")
-	flag.Parse()
-
-	log.SetOutput(os.Stdout)
-	if logTo == "syslog" {
-		w, err := syslog.New(syslog.LOG_INFO, "qtunnel")
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.SetOutput(w)
-	}
-
-	t := tunnel.NewReverseTunnel(faddr, baddr, local, clientMode, cryptoMethod, secret, 4096)
-	log.Println("qtunnel started.")
-	if clientMode {
-		go t.StartClient()
-	} else {
-		go t.StartServer()
-	}
+	go tunnel.NewReverseTunnel(":9091", ":9092", false, "rc4", "abc", 100).StartServer()
+	time.Sleep(time.Second)
+	tunnel.NewReverseTunnel(":8080", "127.0.0.1:9092", false, "rc4", "abc", 10).StartClient()
 	waitSignal()
 }

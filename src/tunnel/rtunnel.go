@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net"
 	"time"
 )
@@ -73,8 +74,8 @@ func (t *ReverseTunnel) StartClient() {
 				T:    MsgTypeHeartBeat,
 				Data: "hello world !",
 			})
-			// rand.Seed(time.Now().UnixNano())
-			// time.Sleep(time.Second * time.Duration(rand.Int63n(10)))
+			rand.Seed(time.Now().UnixNano())
+			time.Sleep(time.Second * time.Duration(rand.Int63n(10)))
 		}
 	}()
 
@@ -129,7 +130,7 @@ func (t *ReverseTunnel) startReceiveData() {
 			recvBuf := make([]byte, 1024)
 			n, err := t.tconn.Read(recvBuf[:]) // recv data
 			if nil != err {
-				log.Fatal(err)
+				continue
 			}
 			log.Printf("receive data %v\n", n)
 			if n <= 0 {

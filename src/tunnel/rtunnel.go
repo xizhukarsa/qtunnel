@@ -64,12 +64,15 @@ func (p *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
 }
 
 func (p *ReverseTunnel) startClient() {
+	connPool := make(chan net.Conn, 100)
 	go func() {
 		for {
 			conn1, err := net.DialTCP("tcp", nil, p.ternelAddr)
 			if nil != err {
 				log.Fatal(err)
 			}
+			connPool <- conn1
+
 			conn2, err := net.DialTCP("tcp", nil, p.addr)
 			if nil != err {
 				log.Fatal(err)
@@ -86,6 +89,7 @@ func (p *ReverseTunnel) startClient() {
 
 			go p.pipe(bconn, fconn, writeChan)
 			go p.pipe(fconn, bconn, readChan)
+
 			time.Sleep(time.Second)
 		}
 	}()

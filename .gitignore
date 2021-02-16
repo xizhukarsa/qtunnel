@@ -4,3 +4,5 @@ debian/qtunnel*
 .vscode/
 __debug_bin
 main
+release-macos
+release-linux

@@ -64,7 +64,7 @@ func (p *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
 }
 
 func (p *ReverseTunnel) startClient() {
-	connPool := make(chan net.Conn, 100)
+	connPool := make(chan net.Conn, int(p.sessionsCount))
 	go func() {
 		for {
 			conn1, err := net.DialTCP("tcp", nil, p.ternelAddr)
@@ -96,7 +96,7 @@ func (p *ReverseTunnel) startClient() {
 }
 
 func (p *ReverseTunnel) startServer() {
-	connPool := make(chan net.Conn, 100)
+	connPool := make(chan net.Conn, int(p.sessionsCount))
 	// list on client
 	go func() {
 		ln, err := net.ListenTCP("tcp", p.ternelAddr)

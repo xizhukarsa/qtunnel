@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"time"
 )
 
 /**
@@ -85,6 +86,7 @@ func (p *ReverseTunnel) startClient() {
 
 			go p.pipe(bconn, fconn, writeChan)
 			go p.pipe(fconn, bconn, readChan)
+			time.Sleep(time.Second)
 		}
 	}()
 }

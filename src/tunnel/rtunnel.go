@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -87,8 +88,20 @@ func (p *ReverseTunnel) startClient() {
 			readChan := make(chan int64)
 			writeChan := make(chan int64)
 
-			go p.pipe(bconn, fconn, writeChan)
-			go p.pipe(fconn, bconn, readChan)
+			go func() {
+				var wg sync.WaitGroup
+				wg.Add(2)
+				go func() {
+					p.pipe(bconn, fconn, writeChan)
+					wg.Done()
+				}()
+				go func() {
+					p.pipe(fconn, bconn, readChan)
+					wg.Done()
+				}()
+				wg.Wait()
+				<-connPool
+			}()
 
 			time.Sleep(time.Second)
 		}

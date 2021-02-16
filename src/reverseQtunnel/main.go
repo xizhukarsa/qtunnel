@@ -37,5 +37,5 @@ func main() {
 	// go tunnel.NewReverseTunnel(":9091", ":9092", false, "rc4", "abc", 100).Start()
 	// time.Sleep(time.Second)
 	// tunnel.NewReverseTunnel(":8080", ":9092", true, "rc4", "abc", 100).Start()
-	// waitSignal()
+	waitSignal()
 }

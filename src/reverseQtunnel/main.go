@@ -32,7 +32,7 @@ func main() {
 	flag.BoolVar(&clientMode, "clientmode", false, "if running at client mode")
 	flag.Parse()
 
-	tunnel.NewReverseTunnel(addr, ternelAddr, clientMode, cryptoMethod, secret, 100).Start()
+	tunnel.NewReverseTunnel(addr, ternelAddr, clientMode, cryptoMethod, secret, 20).Start()
 
 	// go tunnel.NewReverseTunnel(":9091", ":9092", false, "rc4", "abc", 100).Start()
 	// time.Sleep(time.Second)

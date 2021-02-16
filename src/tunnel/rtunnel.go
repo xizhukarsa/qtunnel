@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"sync"
-	"time"
 )
 
 /**
@@ -102,8 +101,6 @@ func (p *ReverseTunnel) startClient() {
 				wg.Wait()
 				<-connPool
 			}()
-
-			time.Sleep(time.Second)
 		}
 	}()
 }

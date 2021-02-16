@@ -1,32 +1,17 @@
 package tunnel
 
 import (
-	"bytes"
-	"encoding/base64"
-	"encoding/json"
+	"io"
 	"log"
-	"math/rand"
 	"net"
-	"time"
 )
 
-type MsgType int
-
-const (
-	MsgTypeNone MsgType = iota
-	MsgTypeData
-	MsgTypeHeartBeat
-	MsgTypeQuit
-)
-
-const (
-	split = "\n"
-)
-
-type Msg struct {
-	T    MsgType
-	Data string
-}
+/**
+How to reverse proxy:
+	1. client start tunnel to server
+	2. server store tunnel for user
+	3. when get user data, pick one
+*/
 
 type ReverseTunnel struct {
 	addr, ternelAddr *net.TCPAddr
@@ -34,8 +19,6 @@ type ReverseTunnel struct {
 	cryptoMethod     string
 	secret           []byte
 	sessionsCount    int32
-	tconn            *net.TCPConn
-	reader           chan Msg
 	pool             *recycler
 }
 
@@ -56,141 +39,101 @@ func NewReverseTunnel(addr, ternelAddress string, clientMode bool, cryptoMethod,
 		secret:        []byte(secret),
 		sessionsCount: int32(size),
 		pool:          NewRecycler(size),
-		reader:        make(chan Msg, 1024),
 	}
 }
 
-func (t *ReverseTunnel) StartClient() {
-	conn2, err := net.DialTCP("tcp", nil, t.ternelAddr)
-	if nil != err {
-		log.Fatal(err)
+func (p *ReverseTunnel) Start() {
+	if p.clientMode {
+		p.startClient()
+	} else {
+		p.startServer()
 	}
-	t.tconn = conn2
-	// t.startReceiveData()
+}
 
-	go func() {
-		for {
-			t.sendMsg(Msg{
-				T:    MsgTypeHeartBeat,
-				Data: "hello world !",
-			})
-			rand.Seed(time.Now().UnixNano())
-			time.Sleep(time.Second * time.Duration(rand.Int63n(10)))
-		}
+func (p *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
+	defer func() {
+		dst.CloseWrite()
+		src.CloseRead()
 	}()
-
-}
-
-func (t *ReverseTunnel) StartServer() {
-	ln1, err := net.ListenTCP("tcp", t.ternelAddr)
-	if nil != err {
-		log.Fatal(err)
-	}
-
-	conn, err := ln1.AcceptTCP()
+	n, err := io.Copy(dst, src)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
-	log.Println("tunnel client connected")
-	t.tconn = conn
-	t.startReceiveData()
-
-	go func() {
-		for msg := range t.reader {
-			if msg.T == MsgTypeHeartBeat {
-				log.Println("heart beat")
-			}
-		}
-	}()
-
-	// ln2, err := net.ListenTCP("tcp", t.addr)
-	// if nil != err {
-	// 	log.Fatal(err)
-	// }
-
-	// go func() {
-	// 	clientConn, err := ln2.AcceptTCP()
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	log.Printf("receive user req %v\n", clientConn)
-	// }()
+	c <- n
 }
 
-func (t *ReverseTunnel) startReceiveData() {
+func (p *ReverseTunnel) startClient() {
 	go func() {
-		splitBuf := []byte(split)
-		l := len(splitBuf)
-		data := []byte{}
 		for {
-			err := t.tconn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			conn1, err := net.DialTCP("tcp", nil, p.ternelAddr)
 			if nil != err {
 				log.Fatal(err)
 			}
-			recvBuf := make([]byte, 1024)
-			n, err := t.tconn.Read(recvBuf[:]) // recv data
-			if nil != err {
-				continue
-			}
-			log.Printf("receive data %v\n", n)
-			if n <= 0 {
-				continue
-			}
-
-			data = append(data, recvBuf[:n]...)
-
-			i := bytes.Index(data, splitBuf)
-			if i < 0 {
-				continue
-			}
-			j := bytes.Index(data[i+l:], splitBuf)
-			if j < 0 {
-				continue
-			}
-
-			tmpBuf := data[i+l : i+j+l]
-			dataBuf, err := base64.StdEncoding.DecodeString(string(tmpBuf))
+			conn2, err := net.DialTCP("tcp", nil, p.addr)
 			if nil != err {
 				log.Fatal(err)
 			}
 
-			var msg Msg
-			err = json.Unmarshal(dataBuf, &msg)
-			if nil != err {
-				log.Fatal(err)
-			}
-			t.reader <- msg
+			cipher := NewCipher(p.cryptoMethod, p.secret)
 
-			if msg.T == MsgTypeQuit {
-				break
-			}
+			var bconn, fconn *Conn
+			fconn = NewConn(conn1, cipher, p.pool)
+			bconn = NewConn(conn2, nil, p.pool)
 
-			data = data[j+2*l:]
+			readChan := make(chan int64)
+			writeChan := make(chan int64)
+
+			go p.pipe(bconn, fconn, writeChan)
+			go p.pipe(fconn, bconn, readChan)
 		}
 	}()
 }
 
-func (t *ReverseTunnel) sendMsg(msg Msg) {
-	log.Println("sned msg")
-	_, err := t.tconn.Write([]byte(split))
-	if nil != err {
-		log.Fatal(err)
-	}
-	buf, err := json.Marshal(msg)
-	if nil != err {
-		log.Fatal(err)
-	}
-	_, err = t.tconn.Write([]byte(base64.StdEncoding.EncodeToString(buf)))
-	if nil != err {
-		log.Fatal(err)
-	}
-	_, err = t.tconn.Write([]byte(split))
-	if nil != err {
-		log.Fatal(err)
-	}
-}
+func (p *ReverseTunnel) startServer() {
+	connPool := make(chan net.Conn, 100)
+	// list on client
+	go func() {
+		ln, err := net.ListenTCP("tcp", p.ternelAddr)
+		if nil != err {
+			log.Fatal(err)
+		}
 
-func (t *ReverseTunnel) readMsg() *Msg {
-	msg := <-t.reader
-	return &msg
+		for {
+			cnn, err := ln.Accept()
+			if nil != err {
+				log.Fatal(err)
+			}
+			connPool <- cnn
+			log.Println("client connected")
+		}
+	}()
+
+	// list on user
+	go func() {
+		ln, err := net.ListenTCP("tcp", p.addr)
+		if nil != err {
+			log.Fatal(err)
+		}
+		for {
+			cnn1, err := ln.Accept()
+			if nil != err {
+				log.Fatal(err)
+			}
+			cnn2 := <-connPool
+
+			log.Println("user connected")
+
+			cipher := NewCipher(p.cryptoMethod, p.secret)
+
+			var bconn, fconn *Conn
+			fconn = NewConn(cnn1, nil, p.pool)
+			bconn = NewConn(cnn2, cipher, p.pool)
+
+			readChan := make(chan int64)
+			writeChan := make(chan int64)
+
+			go p.pipe(bconn, fconn, writeChan)
+			go p.pipe(fconn, bconn, readChan)
+		}
+	}()
 }

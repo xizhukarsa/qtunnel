@@ -1,12 +1,12 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"qtunnel/src/tunnel"
 	"syscall"
-	"time"
 )
 
 func waitSignal() {
@@ -23,8 +23,15 @@ func waitSignal() {
 }
 
 func main() {
-	go tunnel.NewReverseTunnel(":9091", ":9092", false, "rc4", "abc", 100).Start()
-	time.Sleep(time.Second)
-	tunnel.NewReverseTunnel(":8080", ":9092", true, "rc4", "abc", 100).Start()
+	var ternelAddr, addr, cryptoMethod, secret string
+	var clientMode bool
+	flag.StringVar(&ternelAddr, "ternelAddr", ":9001", "host:port qtunnel listen on")
+	flag.StringVar(&addr, "addr", "127.0.0.1:6400", "host:port of the backend")
+	flag.StringVar(&cryptoMethod, "crypto", "rc4", "encryption method")
+	flag.StringVar(&secret, "secret", "secret", "password used to encrypt the data")
+	flag.BoolVar(&clientMode, "clientmode", false, "if running at client mode")
+	flag.Parse()
+
+	tunnel.NewReverseTunnel(addr, ternelAddr, false, cryptoMethod, secret, 100).Start()
 	waitSignal()
 }

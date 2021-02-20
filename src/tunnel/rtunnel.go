@@ -21,6 +21,9 @@ type ReverseTunnel struct {
 	secret           []byte
 	sessionsCount    int32
 	pool             *recycler
+	connPoll1        chan net.Conn
+	connPoll2        chan net.Conn
+	connPoll3        chan net.Conn
 }
 
 func NewReverseTunnel(addr, ternelAddress string, clientMode bool, cryptoMethod, secret string, size uint32) *ReverseTunnel {
@@ -40,6 +43,9 @@ func NewReverseTunnel(addr, ternelAddress string, clientMode bool, cryptoMethod,
 		secret:        []byte(secret),
 		sessionsCount: int32(size),
 		pool:          NewRecycler(size),
+		connPoll1:     make(chan net.Conn, size),
+		connPoll2:     make(chan net.Conn, size),
+		connPoll3:     make(chan net.Conn, 1024),
 	}
 }
 
@@ -51,6 +57,23 @@ func (p *ReverseTunnel) Start() {
 	}
 }
 
+func (p *ReverseTunnel) Stop() {
+	closeAllTunn := func(ch chan net.Conn) {
+		log.Println("close all tunn")
+		for {
+			select {
+			case c := <-ch:
+				c.Close()
+			default:
+				return
+			}
+		}
+	}
+	closeAllTunn(p.connPoll1)
+	closeAllTunn(p.connPoll2)
+	closeAllTunn(p.connPoll3)
+}
+
 func (p *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
 	defer func() {
 		dst.CloseWrite()
@@ -58,42 +81,25 @@ func (p *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
 	}()
 	n, err := io.Copy(dst, src)
 	if err != nil {
-		log.Print(err)
+		log.Printf("tunnel data err : %v\n", err)
 	}
 	c <- n
 }
 
 func (p *ReverseTunnel) startClient() {
-	conn1Pool := make(chan *net.TCPConn, int(p.sessionsCount))
-	conn2Pool := make(chan *net.TCPConn, int(p.sessionsCount))
 	go func() {
-		defer func() {
-			closeAllConn := func(ch chan *net.TCPConn) {
-				for {
-					select {
-					case conn := <-conn1Pool:
-						conn.Close()
-					default:
-						return
-					}
-				}
-			}
-			closeAllConn(conn1Pool)
-			closeAllConn(conn2Pool)
-		}()
-
 		for {
 			conn1, err := net.DialTCP("tcp", nil, p.ternelAddr)
 			if nil != err {
 				log.Fatal(err)
 			}
-			conn1Pool <- conn1
+			p.connPoll1 <- conn1
 
 			conn2, err := net.DialTCP("tcp", nil, p.addr)
 			if nil != err {
 				log.Fatal(err)
 			}
-			conn2Pool <- conn2
+			p.connPoll2 <- conn2
 
 			cipher := NewCipher(p.cryptoMethod, p.secret)
 
@@ -116,15 +122,14 @@ func (p *ReverseTunnel) startClient() {
 					wg.Done()
 				}()
 				wg.Wait()
-				<-conn1Pool
-				<-conn2Pool
+				<-p.connPoll1
+				<-p.connPoll2
 			}()
 		}
 	}()
 }
 
 func (p *ReverseTunnel) startServer() {
-	connPool := make(chan net.Conn, int(p.sessionsCount))
 	// list on client
 	go func() {
 		ln, err := net.ListenTCP("tcp", p.ternelAddr)
@@ -137,7 +142,7 @@ func (p *ReverseTunnel) startServer() {
 			if nil != err {
 				log.Fatal(err)
 			}
-			connPool <- cnn
+			p.connPoll3 <- cnn
 			log.Println("client connected")
 		}
 	}()
@@ -153,7 +158,7 @@ func (p *ReverseTunnel) startServer() {
 			if nil != err {
 				log.Fatal(err)
 			}
-			cnn2 := <-connPool
+			cnn2 := <-p.connPoll3
 
 			log.Println("user connected")
 

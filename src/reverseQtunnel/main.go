@@ -9,12 +9,13 @@ import (
 	"syscall"
 )
 
-func waitSignal() {
+func waitSignal(f func()) {
 	var sigChan = make(chan os.Signal, 1)
 	signal.Notify(sigChan)
 	for sig := range sigChan {
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
 			log.Printf("terminated by signal %v\n", sig)
+			f()
 			return
 		} else {
 			log.Printf("received signal: %v, ignore\n", sig)
@@ -32,11 +33,14 @@ func main() {
 	flag.BoolVar(&clientMode, "clientmode", false, "if running at client mode")
 	flag.Parse()
 
-	tunnel.NewReverseTunnel(addr, ternelAddr, clientMode, cryptoMethod, secret, 20).Start()
+	rt := tunnel.NewReverseTunnel(addr, ternelAddr, clientMode, cryptoMethod, secret, 20)
+	rt.Start()
 
 	// go tunnel.NewReverseTunnel(":9091", ":9092", false, "rc4", "abc", 100).Start()
 	// time.Sleep(time.Second)
 	// tunnel.NewReverseTunnel(":8080", "47.103.193.221:9092", true, "rc4", "secret", 100).Start()
 
-	waitSignal()
+	waitSignal(func() {
+		rt.Stop()
+	})
 }

@@ -64,19 +64,40 @@ func (p *ReverseTunnel) pipe(dst, src *Conn, c chan int64) {
 }
 
 func (p *ReverseTunnel) startClient() {
-	connPool := make(chan net.Conn, int(p.sessionsCount))
+	conn1Pool := make(chan *net.TCPConn, int(p.sessionsCount))
+	conn2Pool := make(chan *net.TCPConn, int(p.sessionsCount))
 	go func() {
+		defer func() {
+			for {
+				select {
+				case conn := <-conn1Pool:
+					conn.Close()
+				default:
+					break
+				}
+			}
+			for {
+				select {
+				case conn := <-conn2Pool:
+					conn.Close()
+				default:
+					break
+				}
+			}
+		}()
+
 		for {
 			conn1, err := net.DialTCP("tcp", nil, p.ternelAddr)
 			if nil != err {
 				log.Fatal(err)
 			}
-			connPool <- conn1
+			conn1Pool <- conn1
 
 			conn2, err := net.DialTCP("tcp", nil, p.addr)
 			if nil != err {
 				log.Fatal(err)
 			}
+			conn2Pool <- conn2
 
 			cipher := NewCipher(p.cryptoMethod, p.secret)
 
@@ -99,7 +120,8 @@ func (p *ReverseTunnel) startClient() {
 					wg.Done()
 				}()
 				wg.Wait()
-				<-connPool
+				<-conn1Pool
+				<-conn2Pool
 			}()
 		}
 	}()

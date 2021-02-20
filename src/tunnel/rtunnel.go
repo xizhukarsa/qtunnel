@@ -68,22 +68,18 @@ func (p *ReverseTunnel) startClient() {
 	conn2Pool := make(chan *net.TCPConn, int(p.sessionsCount))
 	go func() {
 		defer func() {
-			for {
-				select {
-				case conn := <-conn1Pool:
-					conn.Close()
-				default:
-					break
+			closeAllConn := func(ch chan *net.TCPConn) {
+				for {
+					select {
+					case conn := <-conn1Pool:
+						conn.Close()
+					default:
+						return
+					}
 				}
 			}
-			for {
-				select {
-				case conn := <-conn2Pool:
-					conn.Close()
-				default:
-					break
-				}
-			}
+			closeAllConn(conn1Pool)
+			closeAllConn(conn2Pool)
 		}()
 
 		for {
